@@ -1,0 +1,55 @@
+# Local development services. `docker compose up -d db mailpit` for everyday work;
+# `docker compose --profile full up --build` also runs the production image.
+name: orbital-quarry
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: space_mining_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./scripts/init-test-db.sql:/docker-entrypoint-initdb.d/10-test-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d space_mining_dev"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "1026:1025" # SMTP  → set SMTP_HOST=localhost SMTP_PORT=1026
+      - "8026:8025" # Web UI → http://localhost:8026
+
+  app:
+    profiles: ["full"]
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-Orbital Quarry}
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@db:5432/space_mining_dev
+      APP_URL: http://localhost:3002
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET in .env}
+      CRON_SECRET: ${CRON_SECRET:?set CRON_SECRET in .env}
+      PAYMENTS_MODE: stripe
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      EMAIL_FROM: Orbital Quarry <no-reply@orbital-quarry.test>
+    ports:
+      - "3002:3000"
+    # Apply migrations, then start the server.
+    command: ["sh", "-c", "node migrate.mjs && node server.js"]
+
+volumes:
+  db-data:

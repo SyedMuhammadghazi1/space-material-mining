@@ -82,7 +82,10 @@ export function getEnv(): Env {
   if (cached) return cached;
   const skip =
     process.env.SKIP_ENV_VALIDATION === "1" || process.env.SKIP_ENV_VALIDATION === "true";
-  const source = skip ? { ...BUILD_PLACEHOLDERS, ...stripEmpty(process.env) } : process.env;
+  // Empty strings count as "unset" so `.env.example`-style blank lines behave like omitted keys.
+  const source = skip
+    ? { ...BUILD_PLACEHOLDERS, ...stripEmpty(process.env) }
+    : stripEmpty(process.env);
   const parsed = schema.safeParse(source);
   if (!parsed.success) {
     if (skip) {
