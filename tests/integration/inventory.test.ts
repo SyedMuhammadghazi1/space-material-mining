@@ -82,6 +82,27 @@ describe("inventory ledger", () => {
     await expectDbError(db.execute(sql`DELETE FROM ledger_entries`), /append-only/);
   });
 
+  it("keeps the audit log append-only but lets user erasure null the actor", async () => {
+    const operator = await createActor("operator");
+    await recordAdjustment(operator, {
+      depotId: ref.depots.LSP!,
+      itemCode: "FE",
+      delta: 3,
+      reason: "Audit trail test",
+    });
+    await expectDbError(db.execute(sql`UPDATE audit_log SET action = 'tampered'`), /append-only/);
+    await expectDbError(db.execute(sql`DELETE FROM audit_log`), /append-only/);
+    await db.execute(sql`DELETE FROM "user" WHERE id = ${operator.id}`);
+    const rows = await db.execute<{ actor_id: string | null; actor_label: string }>(
+      sql`SELECT actor_id, actor_label FROM audit_log`,
+    );
+    expect(rows.rows[0]!.actor_id).toBeNull();
+    const ledger = await db.execute<{ actor_id: string | null }>(
+      sql`SELECT actor_id FROM ledger_entries`,
+    );
+    expect(ledger.rows.every((r) => r.actor_id === null)).toBe(true);
+  });
+
   it("requires a reason for adjustments and records the actor", async () => {
     const operator = await createActor("operator");
     await expect(
