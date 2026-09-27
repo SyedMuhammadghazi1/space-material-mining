@@ -22,6 +22,8 @@ export interface DepositInvoice {
 export interface BillingProvider {
   readonly mode: "stripe" | "test-bypass";
   createDepositInvoice(req: DepositInvoiceRequest): Promise<DepositInvoice>;
+  /** Voids an open (unpaid) invoice so it can no longer be paid. Throws if it is already paid. */
+  voidInvoice(invoiceId: string): Promise<void>;
 }
 
 let stripeClient: Stripe | null = null;
@@ -106,6 +108,10 @@ class StripeBillingProvider implements BillingProvider {
     );
     return { invoiceId: finalized.id!, hostedInvoiceUrl: finalized.hosted_invoice_url ?? null };
   }
+
+  async voidInvoice(invoiceId: string): Promise<void> {
+    await getStripe().invoices.voidInvoice(invoiceId, {}, { idempotencyKey: `void-${invoiceId}` });
+  }
 }
 
 /**
@@ -121,6 +127,7 @@ class TestBypassBillingProvider implements BillingProvider {
   async createDepositInvoice(req: DepositInvoiceRequest): Promise<DepositInvoice> {
     return { invoiceId: `in_test_${req.orderId.replace(/-/g, "")}`, hostedInvoiceUrl: null };
   }
+  async voidInvoice(): Promise<void> {}
 }
 
 export function getBillingProvider(): BillingProvider {

@@ -8,6 +8,7 @@ import { logger } from "@/lib/logger";
 import { sendMail } from "@/lib/mailer";
 import { audit } from "./audit";
 import { type Actor, OPERATIONS, STAFF_ROLES, assertRole, isStaff } from "./authz";
+import { getBillingProvider } from "./billing";
 import { ConflictError, NotFoundError, ensureUuid } from "./errors";
 import { applyMovement, releaseReservation, reserveStock } from "./inventory";
 
@@ -183,7 +184,7 @@ export async function fulfilOrder(actor: Actor, orderId: string) {
 export async function cancelOrder(actor: Actor, orderId: string, reason: string) {
   assertRole(actor, ["admin"]);
   const clean = z.string().trim().min(3).max(500).parse(reason);
-  return db.transaction(async (tx) => {
+  const { cancelled, openInvoiceId } = await db.transaction(async (tx) => {
     const order = await lockOrder(tx, orderId);
     if (order.status === "fulfilled" || order.status === "cancelled")
       throw new ConflictError(`Order is ${order.status}`, "invalid_state");
@@ -205,6 +206,20 @@ export async function cancelOrder(actor: Actor, orderId: string, reason: string)
       entityId: orderId,
       metadata: { reason: clean, previousStatus: order.status },
     });
-    return updated!;
+    const unpaid = order.status === "awaiting_deposit" ? order.invoiceId : null;
+    return { cancelled: updated!, openInvoiceId: unpaid };
   });
+  // The deposit invoice was emailed with a payment link: void it so the customer can't pay for a
+  // cancelled order (the webhook only confirms orders awaiting their deposit and would ignore it).
+  if (openInvoiceId) {
+    await getBillingProvider()
+      .voidInvoice(openInvoiceId)
+      .catch((err) =>
+        logger.error(
+          { err, orderId, invoiceId: openInvoiceId },
+          "could not void the deposit invoice of a cancelled order — check for payment/refund",
+        ),
+      );
+  }
+  return cancelled;
 }
