@@ -197,6 +197,10 @@ async function seedTelemetry(
 }
 
 async function main() {
+  // Demo users share a well-known password; never create them in production by accident.
+  if (process.env.NODE_ENV === "production" && process.env.ALLOW_PRODUCTION_SEED !== "1") {
+    throw new Error("Refusing to seed demo data with NODE_ENV=production.");
+  }
   if (process.argv.includes("--reset")) await reset();
   const [already] = await db
     .select({ id: user.id })
