@@ -39,6 +39,8 @@ const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
   reactStrictMode: true,
+  // Don't let `next dev` write AGENTS.md / CLAUDE.md into the repository.
+  agentRules: false,
   serverExternalPackages: ["pino", "pino-pretty", "pg"],
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];

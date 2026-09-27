@@ -1,4 +1,5 @@
-import { ValidationError, errorResponse } from "@/server/errors";
+import { errorResponse } from "@/server/errors";
+import { readJsonCapped } from "@/server/request";
 import { STAFF_ROLES } from "@/server/authz";
 import { previewEconomics } from "@/server/scenarios";
 import { requireApiRole } from "@/server/session";
@@ -9,13 +10,7 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request) {
   try {
     const actor = await requireApiRole(req, STAFF_ROLES);
-    let body: unknown;
-    try {
-      body = await req.json();
-    } catch {
-      throw new ValidationError("Body must be valid JSON");
-    }
-    return Response.json(await previewEconomics(actor, body));
+    return Response.json(await previewEconomics(actor, await readJsonCapped(req, 64 * 1024)));
   } catch (err) {
     return errorResponse(err);
   }

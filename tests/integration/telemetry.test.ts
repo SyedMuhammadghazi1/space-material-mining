@@ -128,6 +128,25 @@ describe("POST /api/v1/telemetry", () => {
     expect(notJson.status).toBe(422);
   });
 
+  it("rejects oversized bodies without buffering them (413)", async () => {
+    const big = JSON.stringify({ readings: [reading(1)], pad: "x".repeat(600 * 1024) });
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(big));
+        controller.close();
+      },
+    });
+    const res = await telemetryPOST(
+      new Request("http://localhost/api/v1/telemetry", {
+        method: "POST",
+        headers: { authorization: `Bearer ${key}` },
+        body: stream,
+        duplex: "half",
+      } as RequestInit),
+    );
+    expect(res.status).toBe(413);
+  });
+
   it("flags out-of-range readings but still accepts them", async () => {
     const res = await post({ readings: [reading(1, { temperatureC: 2100 })] });
     expect(await res.json()).toMatchObject({ accepted: 1, anomalies: 1 });

@@ -1,9 +1,9 @@
 import { getEnv } from "@/env";
 import { telemetryBatchSchema } from "@/lib/telemetry-schema";
 import { parseBearer } from "@/server/api-keys";
-import { UnauthorizedError, ValidationError, errorResponse } from "@/server/errors";
+import { UnauthorizedError, errorResponse } from "@/server/errors";
 import { enforceRateLimit } from "@/server/rate-limit";
-import { clientIp } from "@/server/request";
+import { clientIp, readJsonCapped } from "@/server/request";
 import { authenticateRigKey } from "@/server/rigs";
 import { ingestTelemetry } from "@/server/telemetry";
 
@@ -30,17 +30,7 @@ export async function POST(req: Request) {
     }
     await enforceRateLimit(`telemetry:rig:${rig.id}`, getEnv().TELEMETRY_RATE_LIMIT_PER_MINUTE, 60);
 
-    const length = Number(req.headers.get("content-length") ?? 0);
-    if (length > MAX_BODY_BYTES) throw new ValidationError("Payload too large (max 512 KiB)");
-    const text = await req.text();
-    if (text.length > MAX_BODY_BYTES) throw new ValidationError("Payload too large (max 512 KiB)");
-    let json: unknown;
-    try {
-      json = JSON.parse(text);
-    } catch {
-      throw new ValidationError("Body must be valid JSON");
-    }
-    const batch = telemetryBatchSchema.parse(json);
+    const batch = telemetryBatchSchema.parse(await readJsonCapped(req, MAX_BODY_BYTES));
     const result = await ingestTelemetry(rig, batch);
     return Response.json(result, { status: result.accepted > 0 ? 201 : 200 });
   } catch (err) {
