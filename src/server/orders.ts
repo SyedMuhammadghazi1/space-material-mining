@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { type Tx, db } from "@/db";
 import { depots, items, orders, user } from "@/db/schema";
@@ -59,12 +59,31 @@ export async function listOrders(
 /**
  * Called from the Stripe webhook (inside its idempotency transaction): awaiting_deposit →
  * confirmed. Re-delivery of the same or a different event for a confirmed order is a no-op.
+ *
+ * `metadataOrderId` (set on every deposit invoice we create) covers an invoice that is reported
+ * paid before its id was stored on the order — e.g. paid on finalisation from customer credit, or
+ * the app failed after Stripe created it. It only matches an order with no invoice recorded.
  */
-export async function confirmOrderForPaidInvoice(tx: Tx, invoiceId: string, eventId: string) {
+export async function confirmOrderForPaidInvoice(
+  tx: Tx,
+  invoiceId: string,
+  eventId: string,
+  metadataOrderId?: string | null,
+) {
+  const byMetadata =
+    metadataOrderId && z.uuid().safeParse(metadataOrderId).success
+      ? and(eq(orders.id, metadataOrderId), isNull(orders.invoiceId))
+      : undefined;
   const [order] = await tx
     .update(orders)
-    .set({ status: "confirmed", confirmedAt: new Date() })
-    .where(and(eq(orders.invoiceId, invoiceId), eq(orders.status, "awaiting_deposit")))
+    .set({
+      status: "confirmed",
+      confirmedAt: new Date(),
+      invoiceId: sql`COALESCE(${orders.invoiceId}, ${invoiceId})`,
+    })
+    .where(
+      and(or(eq(orders.invoiceId, invoiceId), byMetadata), eq(orders.status, "awaiting_deposit")),
+    )
     .returning();
   if (!order) return null;
   await audit(

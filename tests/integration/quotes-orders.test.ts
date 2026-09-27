@@ -27,6 +27,7 @@ let operator: Actor;
 function invoicePaidEvent(
   invoiceId: string,
   eventId = `evt_${Math.random().toString(36).slice(2)}`,
+  metadata: Record<string, string> = {},
 ) {
   return {
     id: eventId,
@@ -34,7 +35,7 @@ function invoicePaidEvent(
     type: "invoice.paid",
     api_version: "2026-08-26.dahlia",
     created: Math.floor(Date.now() / 1000),
-    data: { object: { id: invoiceId, object: "invoice", metadata: {} } },
+    data: { object: { id: invoiceId, object: "invoice", metadata } },
     livemode: false,
     pending_webhooks: 1,
     request: { id: null, idempotency_key: null },
@@ -118,6 +119,35 @@ describe("quote → accept → invoice → webhook → confirmed", () => {
       .from(auditLog)
       .where(eq(auditLog.action, "order.deposit_paid"));
     expect(paidAudits).toHaveLength(1);
+  });
+
+  it("confirms an order whose invoice was paid before its id was stored locally", async () => {
+    // Stripe can report invoice.paid before orders.invoice_id is written (an invoice covered by
+    // customer credit is paid on finalisation; or the app failed after Stripe created it). The
+    // event must not be consumed as "unknown invoice" — nothing would ever confirm the order.
+    const order = await acceptQuote(customer, (await issuedQuote()).id);
+    await db.update(orders).set({ invoiceId: null }).where(eq(orders.id, order.id));
+    const res = await deliverWebhook(
+      invoicePaidEvent(order.invoiceId!, "evt_early", { orderId: order.id }),
+    );
+    expect(await res.json()).toMatchObject({ duplicate: false, handled: true, orderId: order.id });
+    const [row] = await db.select().from(orders).where(eq(orders.id, order.id));
+    expect(row!.status).toBe("confirmed");
+    expect(row!.invoiceId).toBe(order.invoiceId);
+  });
+
+  it("does not trust invoice metadata over a different stored invoice", async () => {
+    const order = await acceptQuote(customer, (await issuedQuote()).id);
+    const other = await deliverWebhook(
+      invoicePaidEvent("in_someone_else", "evt_meta_1", { orderId: order.id }),
+    );
+    expect(await other.json()).toMatchObject({ handled: false });
+    const junk = await deliverWebhook(
+      invoicePaidEvent("in_junk", "evt_meta_2", { orderId: "not-a-uuid" }),
+    );
+    expect(junk.status).toBe(200);
+    const [row] = await db.select().from(orders).where(eq(orders.id, order.id));
+    expect(row!.status).toBe("awaiting_deposit");
   });
 
   it("rejects bad signatures and unsigned requests", async () => {

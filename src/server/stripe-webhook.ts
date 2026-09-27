@@ -28,7 +28,12 @@ export async function processStripeEvent(event: Stripe.Event): Promise<WebhookOu
       case "invoice.paid": {
         const invoice = event.data.object as Stripe.Invoice;
         if (!invoice.id) return { duplicate: false, handled: false };
-        const order = await confirmOrderForPaidInvoice(tx, invoice.id, event.id);
+        const order = await confirmOrderForPaidInvoice(
+          tx,
+          invoice.id,
+          event.id,
+          invoice.metadata?.orderId,
+        );
         if (!order)
           logger.warn(
             { invoiceId: invoice.id, eventId: event.id },
