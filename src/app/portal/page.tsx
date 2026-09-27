@@ -59,7 +59,7 @@ export default async function PortalHome() {
                   <tr key={quote.id}>
                     <td className={td}>
                       <Link
-                        className="font-medium text-blue-700 underline underline-offset-2"
+                        className="font-medium whitespace-nowrap text-blue-700 underline underline-offset-2"
                         href={`/portal/quotes/${quote.id}`}
                       >
                         {quote.reference}
@@ -99,7 +99,7 @@ export default async function PortalHome() {
                   <tr key={order.id}>
                     <td className={td}>
                       <Link
-                        className="font-medium text-blue-700 underline underline-offset-2"
+                        className="font-medium whitespace-nowrap text-blue-700 underline underline-offset-2"
                         href={`/portal/orders/${order.id}`}
                       >
                         {order.reference}

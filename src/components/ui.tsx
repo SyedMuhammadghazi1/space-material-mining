@@ -210,7 +210,7 @@ export function TableWrap({ children, label }: { children: ReactNode; label?: st
       aria-label={label}
       tabIndex={label ? 0 : undefined}
     >
-      <table className="tabular w-full min-w-max border-collapse text-left text-sm">
+      <table className="tabular w-full min-w-[40rem] border-collapse text-left text-sm">
         {children}
       </table>
     </div>

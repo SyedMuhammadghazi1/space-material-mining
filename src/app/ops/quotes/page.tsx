@@ -40,7 +40,7 @@ export default async function QuoteQueuePage() {
                 <tr key={quote.id}>
                   <td className={td}>
                     <Link
-                      className="font-medium text-blue-700 underline underline-offset-2"
+                      className="font-medium whitespace-nowrap text-blue-700 underline underline-offset-2"
                       href={`/ops/quotes/${quote.id}`}
                     >
                       {quote.reference}

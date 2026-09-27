@@ -50,7 +50,7 @@ export default async function OrdersPage() {
                 }) => (
                   <tr key={order.id}>
                     <td className={td}>
-                      <span className="font-medium">{order.reference}</span>
+                      <span className="font-medium whitespace-nowrap">{order.reference}</span>
                       <span className="block text-xs text-slate-500">
                         {formatDate(order.createdAt)}
                       </span>
@@ -91,6 +91,7 @@ export default async function OrdersPage() {
                               required
                               placeholder="Depot…"
                               options={depots.map((d) => ({ value: d.id, label: d.name }))}
+                              className="min-w-48"
                             />
                             <SubmitButton className="px-2 py-1 text-xs">Reserve</SubmitButton>
                           </ActionForm>
