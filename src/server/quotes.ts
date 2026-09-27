@@ -16,6 +16,11 @@ import { enforceRateLimit } from "./rate-limit";
 import { makeReference } from "./references";
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
+/** True for real calendar dates only (Date.parse rolls "2099-02-30" over to March; Postgres rejects it). */
+const isCalendarDate = (d: string) => {
+  const t = Date.parse(`${d}T00:00:00Z`);
+  return Number.isFinite(t) && new Date(t).toISOString().slice(0, 10) === d;
+};
 
 /** Issued quotes past their validity date are reported as expired even before a write marks them. */
 export function effectiveQuoteStatus(
@@ -29,11 +34,16 @@ export function effectiveQuoteStatus(
 
 export const quoteRequestSchema = z.object({
   itemCode: z.string().min(1, "Choose a product or material").max(40),
-  quantity: z.coerce.number().positive("Quantity must be positive").max(10_000_000),
+  quantity: z.coerce
+    .number()
+    .positive("Quantity must be positive")
+    .min(0.001, "Quantities are in kg to the gram (minimum 0.001)")
+    .max(10_000_000),
   deliveryNode: z.enum(ORBITAL_NODES, "Choose a delivery node"),
   targetDate: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD")
+    .refine(isCalendarDate, "Enter a valid date")
     .refine((d) => d > todayIso(), "Target date must be in the future")
     .optional()
     .or(z.literal("").transform(() => undefined)),

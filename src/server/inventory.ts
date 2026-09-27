@@ -218,7 +218,11 @@ export const transferSchema = z
     fromDepotId: z.uuid(),
     toDepotId: z.uuid(),
     itemCode: z.string().min(1).max(40),
-    quantity: z.coerce.number().positive("Quantity must be positive").max(1e9),
+    quantity: z.coerce
+      .number()
+      .positive("Quantity must be positive")
+      .min(0.001, "Quantities are in kg to the gram (minimum 0.001)")
+      .max(1e9),
     transportMission: z.string().trim().min(3, "Name the transport mission").max(120),
   })
   .refine((v) => v.fromDepotId !== v.toDepotId, {

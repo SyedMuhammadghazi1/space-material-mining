@@ -6,7 +6,7 @@ import { db } from "@/db";
 import { auditLog, ledgerEntries, orders, quotes, stripeEvents } from "@/db/schema";
 import { getOutbox } from "@/lib/mailer";
 import { applyMovement, transferStock } from "@/server/inventory";
-import { ConflictError, InsufficientInventoryError } from "@/server/errors";
+import { ConflictError, InsufficientInventoryError, toAppError } from "@/server/errors";
 import {
   acceptQuote,
   declineQuote,
@@ -187,6 +187,26 @@ describe("quote → accept → invoice → webhook → confirmed", () => {
     await expect(
       requestQuote(customer, { itemCode: "REGOLITH", quantity: 10, deliveryNode: "EML1" }),
     ).rejects.toThrow(/public catalog/);
+  });
+
+  it("rejects sub-gram quantities and impossible dates as invalid input (422, not 500)", async () => {
+    const attempts = [
+      { itemCode: "O2", quantity: 0.0004, deliveryNode: "EML1" },
+      { itemCode: "O2", quantity: 10, deliveryNode: "EML1", targetDate: "2099-02-30" },
+      { itemCode: "O2", quantity: 10, deliveryNode: "EML1", targetDate: "2099-13-01" },
+    ];
+    for (const raw of attempts) {
+      const err = await requestQuote(customer, raw).catch((e: unknown) => e);
+      expect(toAppError(err).status).toBe(422);
+    }
+    expect(await db.select().from(quotes)).toHaveLength(0);
+    const leap = await requestQuote(customer, {
+      itemCode: "O2",
+      quantity: 10,
+      deliveryNode: "EML1",
+      targetDate: "2096-02-29",
+    });
+    expect(leap.targetDate).toBe("2096-02-29");
   });
 });
 

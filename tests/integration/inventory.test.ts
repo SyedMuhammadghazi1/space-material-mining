@@ -2,7 +2,12 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { inventoryBalances, transfers } from "@/db/schema";
-import { InsufficientInventoryError, ForbiddenError, ValidationError } from "@/server/errors";
+import {
+  InsufficientInventoryError,
+  ForbiddenError,
+  ValidationError,
+  toAppError,
+} from "@/server/errors";
 import {
   applyMovement,
   findBalanceDrift,
@@ -140,6 +145,20 @@ describe("inventory ledger", () => {
         reason: "Count",
       }),
     ).rejects.toBeInstanceOf(ValidationError);
+  });
+
+  it("rejects sub-gram transfers as invalid input instead of a database error", async () => {
+    const operator = await createActor("operator");
+    await stock(ref.depots.LSP!, "O2", 10);
+    const err = await transferStock(operator, {
+      fromDepotId: ref.depots.LSP!,
+      toDepotId: ref.depots["EML1-GW"]!,
+      itemCode: "O2",
+      quantity: 0.0004,
+      transportMission: "Crumbs",
+    }).catch((e: unknown) => e);
+    expect(toAppError(err).status).toBe(422);
+    expect(await db.select().from(transfers)).toHaveLength(0);
   });
 
   it("transfers stock between depots and records the transport Δv and cost", async () => {
