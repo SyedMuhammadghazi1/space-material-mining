@@ -11,11 +11,21 @@ import { audit } from "./audit";
 import { type Actor, ENGINEERING, assertRole, isStaff } from "./authz";
 import { getBillingProvider } from "./billing";
 import { priceItem } from "./catalog";
-import { ConflictError, NotFoundError, ValidationError } from "./errors";
+import { ConflictError, NotFoundError, ValidationError, ensureUuid } from "./errors";
 import { enforceRateLimit } from "./rate-limit";
 import { makeReference } from "./references";
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
+
+/** Issued quotes past their validity date are reported as expired even before a write marks them. */
+export function effectiveQuoteStatus(
+  quote: { status: (typeof quotes.$inferSelect)["status"]; validUntil: Date | null },
+  now = new Date(),
+) {
+  if (quote.status === "issued" && quote.validUntil && quote.validUntil.getTime() < now.getTime())
+    return "expired" as const;
+  return quote.status;
+}
 
 export const quoteRequestSchema = z.object({
   itemCode: z.string().min(1, "Choose a product or material").max(40),
@@ -135,6 +145,7 @@ export async function issueQuote(actor: Actor, id: string, raw: unknown) {
   assertRole(actor, ENGINEERING);
   const input = issueQuoteSchema.parse(raw);
   const issued = await db.transaction(async (tx) => {
+    ensureUuid(id, "Quote");
     const [quote] = await tx.select().from(quotes).where(eq(quotes.id, id)).for("update");
     if (!quote) throw new NotFoundError("Quote not found");
     if (quote.status !== "requested")
@@ -185,6 +196,7 @@ export async function issueQuote(actor: Actor, id: string, raw: unknown) {
 
 export async function declineQuote(actor: Actor, id: string) {
   assertRole(actor, ["customer"]);
+  ensureUuid(id, "Quote");
   return db.transaction(async (tx) => {
     const [quote] = await tx
       .select()
@@ -210,6 +222,7 @@ export async function declineQuote(actor: Actor, id: string) {
  */
 export async function acceptQuote(actor: Actor, id: string, now = new Date()) {
   assertRole(actor, ["customer"]);
+  ensureUuid(id, "Quote");
   const env = getEnv();
   const outcome = await db.transaction(async (tx) => {
     const [quote] = await tx
@@ -261,6 +274,7 @@ export async function acceptQuote(actor: Actor, id: string, now = new Date()) {
 
 /** Creates (or re-tries) the Stripe deposit invoice for an order awaiting its deposit. */
 export async function createDepositInvoice(actor: Actor, orderId: string) {
+  ensureUuid(orderId, "Order");
   const [row] = await db
     .select({
       order: orders,

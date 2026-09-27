@@ -34,31 +34,27 @@ export interface Reference {
 export async function seedReference(): Promise<Reference> {
   const depotRows = await db.insert(depots).values(DEPOTS).returning();
   const depotIds = Object.fromEntries(depotRows.map((d) => [d.code, d.id]));
-  await db
-    .insert(items)
-    .values(
-      [...MATERIAL_ITEMS, ...PRODUCT_ITEMS].map(
-        ({ code, name, kind, unit, unitMassKg, description, isPublic }) => ({
-          code,
-          name,
-          kind,
-          unit,
-          unitMassKg,
-          description,
-          isPublic,
-        }),
-      ),
-    );
+  await db.insert(items).values(
+    [...MATERIAL_ITEMS, ...PRODUCT_ITEMS].map(
+      ({ code, name, kind, unit, unitMassKg, description, isPublic }) => ({
+        code,
+        name,
+        kind,
+        unit,
+        unitMassKg,
+        description,
+        isPublic,
+      }),
+    ),
+  );
   for (const p of PRODUCT_ITEMS) {
-    await db
-      .insert(products)
-      .values({
-        itemCode: p.code,
-        energyKWhPerUnit: p.energyKWhPerUnit,
-        opsCostPerUnitCents: p.opsCostPerUnitCents,
-        leadTimeDays: p.leadTimeDays,
-        defaultDepotId: depotIds[p.depotCode],
-      });
+    await db.insert(products).values({
+      itemCode: p.code,
+      energyKWhPerUnit: p.energyKWhPerUnit,
+      opsCostPerUnitCents: p.opsCostPerUnitCents,
+      leadTimeDays: p.leadTimeDays,
+      defaultDepotId: depotIds[p.depotCode],
+    });
     await db
       .insert(bomLines)
       .values(

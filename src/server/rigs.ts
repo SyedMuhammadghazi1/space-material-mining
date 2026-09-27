@@ -7,7 +7,7 @@ import { PROCESS_IDS, getProcess } from "@/lib/models";
 import { audit } from "./audit";
 import { generateRigKey, hashRigKey } from "./api-keys";
 import { type Actor, OPERATIONS, STAFF_ROLES, assertRole } from "./authz";
-import { ConflictError, NotFoundError } from "./errors";
+import { ConflictError, NotFoundError, ensureUuid } from "./errors";
 
 export const rigSchema = z.object({
   missionId: z.uuid(),
@@ -55,6 +55,7 @@ export async function createRig(actor: Actor, raw: unknown) {
 /** Issues a new API key for a rig. The plaintext is returned ONCE and never stored. */
 export async function issueRigKey(actor: Actor, rigId: string, label?: string) {
   assertRole(actor, OPERATIONS);
+  ensureUuid(rigId, "Rig");
   return db.transaction(async (tx) => {
     const [rig] = await tx.select().from(rigs).where(eq(rigs.id, rigId));
     if (!rig) throw new NotFoundError("Rig not found");
@@ -86,6 +87,7 @@ export async function issueRigKey(actor: Actor, rigId: string, label?: string) {
 
 export async function revokeRigKey(actor: Actor, keyId: string) {
   assertRole(actor, OPERATIONS);
+  ensureUuid(keyId, "Key");
   return db.transaction(async (tx) => {
     const [row] = await tx
       .update(rigApiKeys)
@@ -105,6 +107,7 @@ export async function revokeRigKey(actor: Actor, keyId: string) {
 
 export async function retireRig(actor: Actor, rigId: string) {
   assertRole(actor, OPERATIONS);
+  ensureUuid(rigId, "Rig");
   return db.transaction(async (tx) => {
     const [rig] = await tx
       .update(rigs)
@@ -162,6 +165,7 @@ export async function listRigs(actor: Actor) {
 
 export async function getRigDetail(actor: Actor, rigId: string) {
   assertRole(actor, STAFF_ROLES);
+  ensureUuid(rigId, "Rig");
   const [rig] = await db
     .select({ rig: rigs, missionName: missions.name, depotName: depots.name })
     .from(rigs)

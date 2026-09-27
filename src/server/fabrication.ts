@@ -6,7 +6,7 @@ import { bomLines, depots, fabricationJobs, items, products } from "@/db/schema"
 import { roundKg } from "@/lib/models";
 import { audit } from "./audit";
 import { type Actor, OPERATIONS, STAFF_ROLES, assertRole } from "./authz";
-import { ConflictError, NotFoundError } from "./errors";
+import { ConflictError, NotFoundError, ensureUuid } from "./errors";
 import { applyMovement, lockBalances } from "./inventory";
 
 export const fabricationJobSchema = z.object({
@@ -53,6 +53,7 @@ async function claim(
   to: JobStatus,
   patch: Partial<typeof fabricationJobs.$inferInsert> = {},
 ) {
+  ensureUuid(jobId, "Fabrication job");
   const [job] = await tx
     .update(fabricationJobs)
     .set({ status: to, ...patch })
@@ -191,4 +192,22 @@ export async function listFabricationJobs(actor: Actor, limit = 100) {
     .innerJoin(depots, eq(depots.id, fabricationJobs.depotId))
     .orderBy(desc(fabricationJobs.createdAt))
     .limit(limit);
+}
+
+export async function listProductCatalog() {
+  const rows = await db
+    .select({
+      code: items.code,
+      name: items.name,
+      unitMassKg: items.unitMassKg,
+      energy: products.energyKWhPerUnit,
+      ops: products.opsCostPerUnitCents,
+      lead: products.leadTimeDays,
+      depotName: depots.name,
+    })
+    .from(products)
+    .innerJoin(items, eq(items.code, products.itemCode))
+    .leftJoin(depots, eq(depots.id, products.defaultDepotId));
+  const bom = await db.select().from(bomLines);
+  return rows.map((r) => ({ ...r, bom: bom.filter((b) => b.productCode === r.code) }));
 }

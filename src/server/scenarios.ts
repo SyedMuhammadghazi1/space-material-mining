@@ -13,6 +13,7 @@ import { type Actor, ENGINEERING, STAFF_ROLES, assertRole } from "./authz";
 import { NotFoundError, ValidationError } from "./errors";
 
 type TargetRow = typeof targets.$inferSelect;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function targetForModel(t: TargetRow) {
   return { kind: t.kind, sourceType: t.sourceType, aAu: t.aAu, e: t.e, iDeg: t.iDeg };
@@ -103,6 +104,7 @@ export async function listScenarios(actor: Actor) {
 
 export async function getScenarios(actor: Actor, ids: string[]) {
   assertRole(actor, STAFF_ROLES);
+  ids = ids.filter((id) => UUID_RE.test(id));
   if (ids.length === 0) return [];
   const rows = await db
     .select({ scenario: missionScenarios, targetName: targets.name })
@@ -129,7 +131,7 @@ export async function getScenario(actor: Actor, id: string) {
  * Publishes a scenario's cost per delivered kg as the pricing basis for each material it
  * delivers at its delivery node (mass-based cost allocation across co-products).
  */
-export async function useScenarioAsCostBasis(actor: Actor, scenarioId: string) {
+export async function publishScenarioCostBasis(actor: Actor, scenarioId: string) {
   assertRole(actor, ENGINEERING);
   const scenario = await getScenario(actor, scenarioId);
   const cost = scenario.results.unitEconomics.costPerDeliveredKgCents;

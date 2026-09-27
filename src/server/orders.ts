@@ -8,7 +8,7 @@ import { logger } from "@/lib/logger";
 import { sendMail } from "@/lib/mailer";
 import { audit } from "./audit";
 import { type Actor, OPERATIONS, STAFF_ROLES, assertRole, isStaff } from "./authz";
-import { ConflictError, NotFoundError } from "./errors";
+import { ConflictError, NotFoundError, ensureUuid } from "./errors";
 import { applyMovement, releaseReservation, reserveStock } from "./inventory";
 
 const orderColumns = {
@@ -91,6 +91,7 @@ export async function notifyOrderConfirmed(orderId: string) {
 }
 
 async function lockOrder(tx: Tx, id: string) {
+  ensureUuid(id, "Order");
   const [order] = await tx.select().from(orders).where(eq(orders.id, id)).for("update");
   if (!order) throw new NotFoundError("Order not found");
   return order;

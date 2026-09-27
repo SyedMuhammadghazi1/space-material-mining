@@ -89,3 +89,11 @@ export function errorResponse(err: unknown): Response {
   }
   return new Response(JSON.stringify(body), { status: appErr.status, headers });
 }
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Treats malformed ids as "not found" instead of letting Postgres raise a cast error. */
+export function ensureUuid(id: string, what = "Record"): string {
+  if (typeof id !== "string" || !UUID_RE.test(id)) throw new NotFoundError(`${what} not found`);
+  return id;
+}

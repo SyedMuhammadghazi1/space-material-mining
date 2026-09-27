@@ -27,23 +27,19 @@ beforeEach(async () => {
   ref = await seedReference();
   operator = await createActor("operator");
   // A two-input product to prove multi-line atomicity.
-  await db
-    .insert(items)
-    .values({
-      code: "TEST-COMPOSITE",
-      name: "Test composite panel",
-      kind: "product",
-      unit: "unit",
-      unitMassKg: 20,
-    });
-  await db
-    .insert(products)
-    .values({
-      itemCode: "TEST-COMPOSITE",
-      energyKWhPerUnit: 10,
-      opsCostPerUnitCents: 1000,
-      defaultDepotId: ref.depots.LSP,
-    });
+  await db.insert(items).values({
+    code: "TEST-COMPOSITE",
+    name: "Test composite panel",
+    kind: "product",
+    unit: "unit",
+    unitMassKg: 20,
+  });
+  await db.insert(products).values({
+    itemCode: "TEST-COMPOSITE",
+    energyKWhPerUnit: 10,
+    opsCostPerUnitCents: 1000,
+    defaultDepotId: ref.depots.LSP,
+  });
   await db.insert(bomLines).values([
     { productCode: "TEST-COMPOSITE", inputCode: "FE", qtyPerUnit: 12 },
     { productCode: "TEST-COMPOSITE", inputCode: "REGOLITH", qtyPerUnit: 9 },

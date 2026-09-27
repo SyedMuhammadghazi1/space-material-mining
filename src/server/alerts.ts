@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { alerts, rigs } from "@/db/schema";
 import { audit } from "./audit";
 import { type Actor, OPERATIONS, STAFF_ROLES, assertRole } from "./authz";
-import { NotFoundError } from "./errors";
+import { NotFoundError, ensureUuid } from "./errors";
 
 export async function listAlerts(actor: Actor, opts: { openOnly?: boolean; limit?: number } = {}) {
   assertRole(actor, STAFF_ROLES);
@@ -19,6 +19,7 @@ export async function listAlerts(actor: Actor, opts: { openOnly?: boolean; limit
 
 export async function resolveAlert(actor: Actor, alertId: string) {
   assertRole(actor, OPERATIONS);
+  ensureUuid(alertId, "Alert");
   const [row] = await db
     .update(alerts)
     .set({ status: "resolved", resolvedAt: new Date() })

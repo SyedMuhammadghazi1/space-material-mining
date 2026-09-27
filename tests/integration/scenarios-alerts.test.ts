@@ -8,7 +8,7 @@ import { MODEL_VERSION } from "@/lib/models";
 import { DEFAULT_SCENARIO_FORM } from "@/lib/scenario-input";
 import { ValidationError } from "@/server/errors";
 import { createRig, issueRigKey } from "@/server/rigs";
-import { createScenario, getScenario, useScenarioAsCostBasis } from "@/server/scenarios";
+import { createScenario, getScenario, publishScenarioCostBasis } from "@/server/scenarios";
 import { importTargetFromSbdb } from "@/server/targets";
 import { ingestTelemetry } from "@/server/telemetry";
 import { authenticateRigKey } from "@/server/rigs";
@@ -66,7 +66,7 @@ describe("mission scenarios", () => {
       targetId: ref.targets["mare-tranquillitatis"],
       processId: "mre",
     });
-    const res = await useScenarioAsCostBasis(engineer, s.id);
+    const res = await publishScenarioCostBasis(engineer, s.id);
     expect(res.items.sort()).toEqual(["FE", "O2", "SI", "TI"]);
     const [basis] = await db
       .select()
@@ -79,7 +79,7 @@ describe("mission scenarios", () => {
       targetId: ref.targets["mare-tranquillitatis"],
       processId: "volatiles",
     });
-    await expect(useScenarioAsCostBasis(engineer, empty.id)).rejects.toBeInstanceOf(
+    await expect(publishScenarioCostBasis(engineer, empty.id)).rejects.toBeInstanceOf(
       ValidationError,
     );
   });

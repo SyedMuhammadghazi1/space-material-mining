@@ -21,12 +21,12 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "tsx scripts/migrate.ts",
-    "db:seed": "tsx scripts/seed.ts",
+    "db:migrate": "tsx --env-file-if-exists=.env scripts/migrate.ts",
+    "db:seed": "tsx --env-file-if-exists=.env --conditions=react-server scripts/seed.ts",
     "db:studio": "drizzle-kit studio",
     "build:migrator": "esbuild scripts/migrate.ts --bundle --platform=node --target=node22 --format=esm --outfile=dist/migrate.mjs --banner:js=\"import { createRequire } from 'module'; const require = createRequire(import.meta.url);\"",
-    "sim:rig": "tsx scripts/sim-rig.ts",
-    "job:rig-health": "tsx scripts/run-job.ts rig-health"
+    "sim:rig": "tsx --env-file-if-exists=.env --conditions=react-server scripts/sim-rig.ts",
+    "job:rig-health": "tsx --env-file-if-exists=.env --conditions=react-server scripts/run-job.ts rig-health"
   },
   "dependencies": {
     "better-auth": "~1.7.6",
@@ -37,6 +37,7 @@
     "pino": "^10.3.1",
     "react": "~19.3.0",
     "react-dom": "~19.3.0",
+    "server-only": "^0.0.1",
     "stripe": "^22.6.2",
     "zod": "^4.6.5"
   },

@@ -7,7 +7,7 @@ import { SOURCE_TYPES } from "@/lib/models";
 import { SbdbError, fetchSbdbTarget } from "@/lib/sbdb";
 import { audit } from "./audit";
 import { type Actor, ENGINEERING, STAFF_ROLES, assertRole } from "./authz";
-import { NotFoundError, ServiceUnavailableError, ValidationError } from "./errors";
+import { NotFoundError, ServiceUnavailableError, ValidationError, ensureUuid } from "./errors";
 
 export type Target = typeof targets.$inferSelect;
 
@@ -18,6 +18,7 @@ export async function listTargets(actor: Actor): Promise<Target[]> {
 
 export async function getTarget(actor: Actor, id: string): Promise<Target> {
   assertRole(actor, STAFF_ROLES);
+  ensureUuid(id, "Target");
   const [t] = await db.select().from(targets).where(eq(targets.id, id));
   if (!t) throw new NotFoundError("Target not found");
   return t;
