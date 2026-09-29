@@ -24,7 +24,11 @@ Only the latest `main` deployment is supported.
   computed only on the server.
 - Security headers (CSP, HSTS, X-Frame-Options DENY, Referrer-Policy, Permissions-Policy,
   X-Content-Type-Options). Known gap: CSP allows inline scripts (see ARCHITECTURE "hardening backlog").
-- Append-only inventory ledger and audit log enforced by database triggers.
+- Append-only inventory ledger and audit log enforced by database triggers. Triggers cannot stop
+  `TRUNCATE` or an owner disabling them, so production runs the app as a restricted runtime role
+  (no `TRUNCATE`, no DDL, not an owner; only `SELECT`/`INSERT` on the append-only tables) and runs
+  migrations with a separate owning role — `scripts/sql/app-role.sql`, docs/DEPLOYMENT.md
+  ("Database roles").
 - Secrets only via environment variables; logs redact credentials and PII.
 
 ## Dependency notes

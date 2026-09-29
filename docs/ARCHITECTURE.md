@@ -145,6 +145,9 @@ slots are below 3:1 contrast on white, which is why the table view and labels ar
   `TRUSTED_PROXY_HOPS` from the right (never the spoofable leftmost one); invalid values → no IP.
   Without an IP, per-IP limits are skipped — never one bucket shared by every client — and
   per-account limits still apply. Better Auth reads the IP only from a header the auth route sets.
+- Append-only `ledger_entries` / `audit_log` (row triggers) plus least-privilege database roles in
+  production: the app connects as a runtime role without `TRUNCATE`, DDL or ownership; migrations use
+  a separate owner role (`scripts/sql/app-role.sql`).
 - Security headers in `next.config.ts`: CSP, HSTS, X-Frame-Options DENY, Referrer-Policy,
   Permissions-Policy, X-Content-Type-Options, COOP.
 - Rig keys: 256-bit random, shown once, SHA-256 at rest, revocable; cron endpoints use a

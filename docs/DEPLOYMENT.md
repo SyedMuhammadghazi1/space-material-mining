@@ -16,6 +16,8 @@ instances behind a load balancer.
   production server ignores it — it applies only while `NEXT_PHASE=phase-production-build` — so a
   missing or invalid secret always stops the app instead of being replaced by a build placeholder.
 - Configure how the client IP is determined for your host — see [Client IP](#client-ip) below.
+- Two database roles: the app connects as a restricted **runtime** role, migrations run as the
+  owning **migration** role — see [Database roles](#database-roles-least-privilege).
 
 ### Client IP
 
@@ -57,6 +59,11 @@ docker run -p 3000:3000 --env-file prod.env orbital-quarry              # serve 
   (checks the database).
 - **Render**: Docker web service; add a "pre-deploy command" `node migrate.mjs`; copy the service's
   deploy hook URL into the GitHub secret `DEPLOY_HOOK_URL`.
+- Platform pre-deploy/release commands run with the app's environment, i.e. the **runtime** role,
+  which cannot run migrations. Either let the GitHub Actions `migrate` job apply them (preferred:
+  the owner credentials never reach the app's environment) or give only that command the migration
+  role's URL (`sh -c 'DATABASE_URL="$MIGRATION_DATABASE_URL" node migrate.mjs'`), accepting that
+  this secret then lives next to the app's.
 - **Fly.io**: `fly launch --no-deploy`, set secrets with `fly secrets set` (and
   `CLIENT_IP_HEADER=fly-client-ip`), add `[deploy] release_command = "node migrate.mjs"` in
   `fly.toml`.
@@ -89,7 +96,9 @@ can pull it (or give the host a read-only token).
    a separate database/branch), including `CLIENT_IP_HEADER=x-real-ip`. `output: "standalone"` is
    ignored by Vercel and harmless.
 3. Migrations: run `npm run db:migrate` from CI (the `migrate` job with `PRODUCTION_DATABASE_URL` =
-   Neon's **direct**, non-pooled URL) before promoting, or locally with the production URL.
+   Neon's **direct**, non-pooled URL for the migration role) before promoting, or locally with that
+   URL. The app's `DATABASE_URL` uses the runtime role (see
+   [Database roles](#database-roles-least-privilege)).
 4. Cron: add `vercel.json`
    ```json
    { "crons": [{ "path": "/api/cron/rig-health", "schedule": "*/10 * * * *" }] }
@@ -108,6 +117,46 @@ can pull it (or give the host a read-only token).
   records applied migrations in `drizzle.__drizzle_migrations`.
 - Keep migrations backwards compatible with the previous app version (expand → deploy → contract) so
   rolling deploys and rollbacks are safe.
+- In production, migrations run as the migration role (`PRODUCTION_DATABASE_URL`), never as the
+  app's runtime role — see below.
+
+### Database roles (least privilege)
+
+`ledger_entries` and `audit_log` are append-only: row triggers reject `UPDATE`/`DELETE`. They
+cannot stop `TRUNCATE` (a statement, not a row operation), and the table **owner** can disable or
+drop the triggers. Local development and the test suites keep using the `postgres` superuser
+(tests `TRUNCATE` between cases), but **production must never run the app as an owner or with
+`TRUNCATE`**. [`scripts/sql/app-role.sql`](../scripts/sql/app-role.sql) sets up two roles:
+
+- **`oq_migrator` — migration role.** Owns every table, sequence, enum and trigger function and may
+  run DDL (`CREATE` on the database and the `public` schema). Used only by `node migrate.mjs` /
+  `npm run db:migrate` — i.e. the deploy workflow's `PRODUCTION_DATABASE_URL` secret — and by
+  `npm run db:seed` outside production.
+- **`oq_app` — runtime role.** What the running app's `DATABASE_URL` uses:
+  `SELECT/INSERT/UPDATE/DELETE` on the application tables, only `SELECT/INSERT` on `ledger_entries`
+  and `audit_log`, and sequence usage. No `TRUNCATE`, no DDL, owns nothing, no access to the
+  `drizzle` schema.
+
+1. As the database owner/admin, connected to the application database, create the roles:
+   ```bash
+   psql "$ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 \
+     -v app_password="$(openssl rand -hex 24)" -v migrator_password="$(openssl rand -hex 24)" \
+     -f scripts/sql/app-role.sql
+   ```
+   You can omit the passwords and set them with `\password` or the provider console instead, and
+   rename the roles with `-v app_role=…` / `-v migrator_role=…`.
+2. Run the migrations **as the migration role**, then run the script again (without passwords): it
+   is idempotent, hands any objects still owned by someone else to the migration role and
+   re-applies the runtime grants and the append-only restrictions. Default privileges give the
+   runtime role access to tables created by later migrations; re-run the script after migrations
+   that add tables anyway (and add any new append-only table to its list).
+3. Point the app's `DATABASE_URL` at `oq_app` and the deploy workflow's `PRODUCTION_DATABASE_URL`
+   at `oq_migrator`. With a pooler (PgBouncer/Neon pooled URL) use the runtime role there and the
+   **direct** URL for the migration role.
+
+Verify from the runtime role: `TRUNCATE audit_log;` and `CREATE TABLE x (id int);` must fail with
+"permission denied". A database restored from a `--no-owner` dump is owned by whoever restored it —
+run the script again before pointing the app at it.
 
 ## 5. Stripe (deposit invoices)
 

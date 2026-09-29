@@ -70,8 +70,10 @@ All key issue/revoke and role changes appear in `/admin/audit`.
 
 1. Prefer provider PITR to a new instance/branch at a timestamp just before the incident.
 2. Or from a logical dump: `createdb oq_restore && pg_restore --no-owner -d oq_restore oq-YYYY-MM-DD.dump`.
-3. Verify: `GET /api/ready`, the drift query above returns no rows, spot-check recent orders/quotes.
-4. Point `DATABASE_URL` at the restored database and redeploy. Reconcile anything after the restore
+3. Re-apply the database roles (`scripts/sql/app-role.sql`, see DEPLOYMENT "Database roles"): a
+   `--no-owner` restore is owned by whoever ran it, and the app must keep using the restricted role.
+4. Verify: `GET /api/ready`, the drift query above returns no rows, spot-check recent orders/quotes.
+5. Point `DATABASE_URL` at the restored database and redeploy. Reconcile anything after the restore
    point: replay Stripe events (below) and let rigs resend telemetry (idempotent).
 
 ## Replaying webhooks

@@ -87,6 +87,7 @@ jobs:
       - name: Apply migrations with the released image
         if: steps.check.outputs.skip != 'true'
         env:
+          # The migration (owner) role — not the app's restricted runtime role (docs/DEPLOYMENT.md).
           DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
         run: docker run --rm -e DATABASE_URL "${{ needs.image.outputs.image }}:${{ needs.image.outputs.sha }}" node migrate.mjs
 

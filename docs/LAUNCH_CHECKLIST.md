@@ -43,6 +43,9 @@ Things a founder must do before real customers. Items marked ⚖️ need profess
 ## Operations & security
 
 - [ ] Production secrets generated fresh (never reuse dev values); stored in the host's secret manager.
+- [ ] Database roles applied (`scripts/sql/app-role.sql`): the app's `DATABASE_URL` uses the runtime
+      role (`TRUNCATE audit_log` fails with "permission denied"), `PRODUCTION_DATABASE_URL` the
+      migration role.
 - [ ] Monitoring: uptime checks on `/api/health` and `/api/ready`, log aggregation with alerts on
       `level>=50`, error tracking (e.g. Sentry), Postgres metrics (connections, storage, slow queries).
 - [ ] Schedule `/api/cron/rig-health`; route alert emails to an on-call rotation (`OPS_ALERT_EMAILS`).

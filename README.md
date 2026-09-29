@@ -164,8 +164,10 @@ The app ships as one container (`Dockerfile`, standalone output, non-root, `HEAL
 bundled migration runner (`docker run <image> node migrate.mjs`). It runs on any container host
 (Render, Fly.io, Railway, ECS, Kubernetes) or on Vercel with managed Postgres (e.g. Neon). After CI
 succeeds on `main`, the `deploy.yml` workflow pushes `ghcr.io/<owner>/<repo>:{sha,latest}` for the
-tested commit, applies migrations with `PRODUCTION_DATABASE_URL` and calls `DEPLOY_HOOK_URL`. Schedule `POST /api/cron/rig-health`
-every 5–10 minutes. Full guide: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+tested commit, applies migrations with `PRODUCTION_DATABASE_URL` and calls `DEPLOY_HOOK_URL`. In
+production the app connects as a restricted database role (no `TRUNCATE`, no DDL) and migrations run
+as a separate owner role: [`scripts/sql/app-role.sql`](scripts/sql/app-role.sql). Schedule
+`POST /api/cron/rig-health` every 5–10 minutes. Full guide: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## Documentation
 
