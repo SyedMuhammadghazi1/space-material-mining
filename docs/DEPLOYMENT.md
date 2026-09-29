@@ -79,8 +79,9 @@ workflow completes on `main`, and its first job runs only if that CI run **succe
 from this repository (never for pull requests, forks or failed runs). It then checks out exactly the
 commit CI tested (`workflow_run.head_sha`), builds and pushes `ghcr.io/<owner>/<repo>:<sha>` and
 `:latest`; runs `node migrate.mjs` from that exact image against `secrets.PRODUCTION_DATABASE_URL`;
-then `POST secrets.DEPLOY_HOOK_URL` (with `image=<name>:<sha>`). A manual `workflow_dispatch` deploys
-the selected branch's head. The migrate and deploy jobs run in the `production` environment (add
+then `POST secrets.DEPLOY_HOOK_URL` (with `image=<name>:<sha>`). A manual `workflow_dispatch` redeploys
+the current head of `main`. A `guard` job first skips any commit that is no longer the head of
+`main`, so a slow CI run for an older commit can never overwrite a newer release. The migrate and deploy jobs run in the `production` environment (add
 required reviewers there for a manual gate). Missing secrets produce a notice instead of a failure.
 If you rename the CI workflow, update `workflows: [CI]` in `deploy.yml` to match its `name:`.
 
