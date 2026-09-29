@@ -46,14 +46,54 @@ describe("env validation", () => {
     expect(() => getEnv()).toThrow(/test-bypass/);
   });
 
-  it("substitutes placeholders when SKIP_ENV_VALIDATION=1 (build only)", () => {
+  it("substitutes placeholders when SKIP_ENV_VALIDATION=1 during `next build`", () => {
     withEnv({
       NODE_ENV: "production",
+      NEXT_PHASE: "phase-production-build",
       SKIP_ENV_VALIDATION: "1",
       DATABASE_URL: undefined,
       BETTER_AUTH_SECRET: undefined,
       CRON_SECRET: undefined,
     });
     expect(getEnv().DATABASE_URL).toMatch(/placeholder/);
+  });
+
+  it("ignores SKIP_ENV_VALIDATION in a running production server", () => {
+    for (const flag of ["1", "true"]) {
+      withEnv({
+        NODE_ENV: "production",
+        NEXT_PHASE: undefined,
+        SKIP_ENV_VALIDATION: flag,
+        DATABASE_URL: undefined,
+        BETTER_AUTH_SECRET: undefined,
+        CRON_SECRET: undefined,
+      });
+      expect(() => getEnv()).toThrow(/Invalid environment configuration/);
+    }
+    // Any other Next.js phase (e.g. `next start` → phase-production-server) is runtime too.
+    withEnv({
+      NODE_ENV: "production",
+      NEXT_PHASE: "phase-production-server",
+      SKIP_ENV_VALIDATION: "1",
+      BETTER_AUTH_SECRET: undefined,
+    });
+    expect(() => getEnv()).toThrow(/BETTER_AUTH_SECRET/);
+  });
+
+  it("never substitutes placeholders for real values in a running production server", () => {
+    withEnv({ ...valid, NODE_ENV: "production", SKIP_ENV_VALIDATION: "1", NEXT_PHASE: undefined });
+    const env = getEnv();
+    expect(env.DATABASE_URL).toBe(valid.DATABASE_URL);
+    expect(env.BETTER_AUTH_SECRET).toBe(valid.BETTER_AUTH_SECRET);
+    expect(env.NODE_ENV).toBe("production");
+    // …and production-only rules still apply.
+    withEnv({
+      ...valid,
+      NODE_ENV: "production",
+      SKIP_ENV_VALIDATION: "1",
+      NEXT_PHASE: undefined,
+      PAYMENTS_MODE: "test-bypass",
+    });
+    expect(() => getEnv()).toThrow(/test-bypass/);
   });
 });

@@ -140,7 +140,7 @@ All variables are validated by [`src/env.ts`](src/env.ts); `.env.example` docume
 | `LAUNCH_COST_PER_KG_CENTS`                                                                            | no           | `250000`                | Earth→LEO price for the landing comparison              |
 | `RIG_SILENT_MINUTES`                                                                                  | no           | `15`                    | Silence threshold for alerts                            |
 | `TELEMETRY_RATE_LIMIT_PER_MINUTE` / `AUTH_RATE_LIMIT_PER_MINUTE` / `PUBLIC_WRITE_RATE_LIMIT_PER_HOUR` | no           | `120` / `10` / `20`     | Rate limits                                             |
-| `SKIP_ENV_VALIDATION`                                                                                 | build only   | —                       | Lets `next build` run without secrets                   |
+| `SKIP_ENV_VALIDATION`                                                                                 | build only   | —                       | `next build` without secrets; ignored at runtime        |
 | `TEST_DATABASE_URL` / `E2E_DATABASE_URL`                                                              | tests        | `…/space_mining_test`   | Wiped by the test suites                                |
 
 ## Testing

@@ -2,7 +2,8 @@ import { z } from "zod";
 
 /**
  * Environment validation. Parsed lazily on first use so `next build` can run with
- * SKIP_ENV_VALIDATION=1 (placeholders are substituted) while runtime fails fast.
+ * SKIP_ENV_VALIDATION=1 (placeholders are substituted) while runtime fails fast. The flag is
+ * ignored by a production server (see `skipValidation`).
  */
 const bool = z
   .enum(["true", "false", "1", "0", ""])
@@ -78,10 +79,22 @@ const BUILD_PLACEHOLDERS: Record<string, string> = {
 
 let cached: Env | undefined;
 
+/**
+ * SKIP_ENV_VALIDATION exists for `next build` (CI, Docker) only. With NODE_ENV=production it is
+ * honoured solely while Next.js is building (`NEXT_PHASE=phase-production-build`), so a production
+ * server that inherits the flag still validates and fails fast instead of silently running on
+ * placeholder secrets.
+ */
+function skipValidation(): boolean {
+  const flag = process.env.SKIP_ENV_VALIDATION;
+  if (flag !== "1" && flag !== "true") return false;
+  if (process.env.NODE_ENV !== "production") return true;
+  return process.env.NEXT_PHASE === "phase-production-build";
+}
+
 export function getEnv(): Env {
   if (cached) return cached;
-  const skip =
-    process.env.SKIP_ENV_VALIDATION === "1" || process.env.SKIP_ENV_VALIDATION === "true";
+  const skip = skipValidation();
   // Empty strings count as "unset" so `.env.example`-style blank lines behave like omitted keys.
   const source = skip
     ? { ...BUILD_PLACEHOLDERS, ...stripEmpty(process.env) }

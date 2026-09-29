@@ -12,6 +12,9 @@ instances behind a load balancer.
   `CRON_SECRET` (`openssl rand -hex 24`), `APP_URL`, SMTP credentials, and for payments
   `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` with `PAYMENTS_MODE=stripe`.
 - `NEXT_PUBLIC_APP_NAME` is inlined at **build** time (Docker build arg / Vercel env var).
+- `SKIP_ENV_VALIDATION=1` is only for `next build` (the Dockerfile sets it in the build stage). A
+  production server ignores it — it applies only while `NEXT_PHASE=phase-production-build` — so a
+  missing or invalid secret always stops the app instead of being replaced by a build placeholder.
 - Behind a load balancer that sets `X-Forwarded-For`, set `TRUST_PROXY=true` so rate limits key on
   the real client IP.
 
