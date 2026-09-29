@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { POST as telemetryPOST } from "@/app/api/v1/telemetry/route";
 import { GET as rigGET } from "@/app/api/v1/rig/route";
 import { db } from "@/db";
 import { ledgerEntries, rigApiKeys, telemetryReadings } from "@/db/schema";
 import { resetEnvCache } from "@/env";
+import { telemetryBatchSchema } from "@/lib/telemetry-schema";
 import { findBalanceDrift } from "@/server/inventory";
-import { createRig, issueRigKey, revokeRigKey } from "@/server/rigs";
+import { authenticateRigKey, createRig, issueRigKey, revokeRigKey } from "@/server/rigs";
+import { ingestTelemetry } from "@/server/telemetry";
 import { balanceOf, createActor, seedReference, type Reference } from "./helpers";
 
 let ref: Reference;
@@ -110,6 +112,47 @@ describe("POST /api/v1/telemetry", () => {
     const bodies = await Promise.all(results.map((r) => r.json()));
     expect(bodies.reduce((s, b) => s + b.accepted, 0)).toBe(2);
     expect(await balanceOf(ref.depots.TRQ!, "O2")).toBe(40);
+  });
+
+  it("processes each batch in ascending seq order (consistent lock order)", async () => {
+    const res = await post({ readings: [reading(7), reading(3), reading(9), reading(5)] });
+    expect(res.status).toBe(201);
+    // Rows are inserted — and their (rig, seq) index entries locked — in processing order, which
+    // the bigserial id records.
+    const stored = await db
+      .select({ seq: telemetryReadings.seq })
+      .from(telemetryReadings)
+      .where(eq(telemetryReadings.rigId, rigId))
+      .orderBy(telemetryReadings.id);
+    expect(stored.map((r) => r.seq)).toEqual([3, 5, 7, 9]);
+  });
+
+  it("does not deadlock on concurrent batches with the same seqs in different orders", async () => {
+    // Slow every row insert down (test-only trigger) so the two transactions are guaranteed to
+    // overlap. Each waits on the other's uncommitted (rig, seq) index entries; in opposite orders
+    // that is a lock cycle and Postgres aborts one of them with "deadlock detected".
+    await db.execute(sql`
+      CREATE FUNCTION test_slow_telemetry_insert() RETURNS trigger AS $$
+      BEGIN PERFORM pg_sleep(0.03); RETURN NEW; END; $$ LANGUAGE plpgsql`);
+    await db.execute(sql`
+      CREATE TRIGGER test_slow_telemetry_insert BEFORE INSERT ON telemetry_readings
+      FOR EACH ROW EXECUTE FUNCTION test_slow_telemetry_insert()`);
+    try {
+      const rig = (await authenticateRigKey(key))!;
+      const seqs = Array.from({ length: 12 }, (_, i) => i + 1);
+      const batch = (order: number[]) =>
+        telemetryBatchSchema.parse({ readings: order.map((s) => reading(s)) });
+      const results = await Promise.all([
+        ingestTelemetry(rig, batch(seqs)),
+        ingestTelemetry(rig, batch([...seqs].reverse())),
+      ]);
+      expect(results.reduce((s, r) => s + r.accepted, 0)).toBe(12);
+      expect(await balanceOf(ref.depots.TRQ!, "O2")).toBe(240);
+      expect(await findBalanceDrift()).toEqual([]);
+    } finally {
+      await db.execute(sql`DROP TRIGGER test_slow_telemetry_insert ON telemetry_readings`);
+      await db.execute(sql`DROP FUNCTION test_slow_telemetry_insert()`);
+    }
   });
 
   it("validates payloads with Zod (422)", async () => {

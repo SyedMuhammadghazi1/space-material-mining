@@ -20,6 +20,10 @@ export interface IngestResult {
  * Stores a telemetry batch and credits newly produced material to the rig's depot — all in one
  * transaction. Idempotent on (rig, seq): replayed readings hit the unique index, are skipped by
  * ON CONFLICT DO NOTHING and therefore never credited twice.
+ *
+ * Readings are processed in ascending seq order. Postgres inserts VALUES rows (taking their
+ * (rig, seq) index entries) in list order and an insert that conflicts with an uncommitted row
+ * waits for that transaction, so overlapping batches in different orders could otherwise deadlock.
  */
 export async function ingestTelemetry(
   rig: AuthenticatedRig,
@@ -27,7 +31,8 @@ export async function ingestTelemetry(
   now = new Date(),
 ): Promise<IngestResult> {
   const limits = { ratedPowerKw: rig.ratedPowerKw, tempMinC: rig.tempMinC, tempMaxC: rig.tempMaxC };
-  const rows = batch.readings.map((r) => ({
+  const readings = [...batch.readings].sort((a, b) => a.seq - b.seq);
+  const rows = readings.map((r) => ({
     rigId: rig.id,
     seq: r.seq,
     recordedAt: new Date(r.timestamp),

@@ -67,9 +67,12 @@ or whole units for products; Δv is integer m/s.
    rate-limited per IP; accepted rigs per rig id (`TELEMETRY_RATE_LIMIT_PER_MINUTE`).
 2. Body ≤ 512 KiB, Zod-validated: 1–500 readings, unique seqs, non-negative masses, known material
    codes, processed outputs ≤ regolith processed (mass conservation).
-3. One transaction: `INSERT … ON CONFLICT (rig_id, seq) DO NOTHING RETURNING` → only newly inserted
-   readings are summed and credited as `production` ledger entries at the rig's depot → rig
-   `last_seen_at`/`last_seq` updated. Replays (even concurrent) are never credited twice.
+3. One transaction: readings are sorted by `seq`, then
+   `INSERT … ON CONFLICT (rig_id, seq) DO NOTHING RETURNING` → only newly inserted readings are
+   summed and credited as `production` ledger entries at the rig's depot → rig
+   `last_seen_at`/`last_seq` updated. Replays (even concurrent) are never credited twice. The sort
+   gives every batch the same lock order on the `(rig_id, seq)` index, so overlapping batches that
+   list the same seqs in different orders can't deadlock.
 4. Out-of-range readings (temperature outside the process envelope, power > 110% rated, future
    timestamps) are stored with `anomalies` and picked up by the rig-health job.
 
