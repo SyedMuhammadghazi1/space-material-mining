@@ -40,10 +40,15 @@ docker run -p 3000:3000 --env-file prod.env orbital-quarry              # serve 
 
 ### GitHub Actions (`.github/workflows/deploy.yml`)
 
-On every push to `main` (or manual dispatch): build and push `ghcr.io/<owner>/<repo>:<sha>` and
-`:latest`; run `node migrate.mjs` from that exact image against `secrets.PRODUCTION_DATABASE_URL`;
-then `POST secrets.DEPLOY_HOOK_URL`. Both jobs run in the `production` environment (add required
-reviewers there for a manual gate). Missing secrets produce a notice instead of a failure.
+Only commits that passed CI are deployed: the workflow is triggered by `workflow_run` when the `CI`
+workflow completes on `main`, and its first job runs only if that CI run **succeeded** for a **push**
+from this repository (never for pull requests, forks or failed runs). It then checks out exactly the
+commit CI tested (`workflow_run.head_sha`), builds and pushes `ghcr.io/<owner>/<repo>:<sha>` and
+`:latest`; runs `node migrate.mjs` from that exact image against `secrets.PRODUCTION_DATABASE_URL`;
+then `POST secrets.DEPLOY_HOOK_URL` (with `image=<name>:<sha>`). A manual `workflow_dispatch` deploys
+the selected branch's head. The migrate and deploy jobs run in the `production` environment (add
+required reviewers there for a manual gate). Missing secrets produce a notice instead of a failure.
+If you rename the CI workflow, update `workflows: [CI]` in `deploy.yml` to match its `name:`.
 
 Configure: repository secrets `PRODUCTION_DATABASE_URL`, `DEPLOY_HOOK_URL`; optional variable
 `NEXT_PUBLIC_APP_NAME`. The GHCR package may need its visibility/permissions adjusted so your host
