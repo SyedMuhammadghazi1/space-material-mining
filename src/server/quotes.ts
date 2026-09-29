@@ -282,7 +282,14 @@ export async function acceptQuote(actor: Actor, id: string, now = new Date()) {
   return order;
 }
 
-/** Creates (or re-tries) the Stripe deposit invoice for an order awaiting its deposit. */
+/**
+ * Creates (or re-tries) the Stripe deposit invoice for an order awaiting its deposit.
+ *
+ * The order can be cancelled while Stripe is creating the invoice; `cancelOrder` only voids an
+ * invoice it can already see. So the result is recorded under the same row lock `cancelOrder` takes,
+ * and only while the order still awaits its deposit — otherwise the new invoice is voided so the
+ * emailed payment link can't be used for an order that no longer exists.
+ */
 export async function createDepositInvoice(actor: Actor, orderId: string) {
   ensureUuid(orderId, "Order");
   const [row] = await db
@@ -309,16 +316,45 @@ export async function createDepositInvoice(actor: Actor, orderId: string) {
     amountCents: row.order.depositCents,
     description: `Reservation deposit (${getEnv().DEPOSIT_PERCENT}%) for order ${row.order.reference}: ${row.order.quantity} × ${row.itemName} delivered to ${row.order.deliveryNode}`,
   });
-  const [updated] = await db
-    .update(orders)
-    .set({ invoiceId: invoice.invoiceId, invoiceUrl: invoice.hostedInvoiceUrl })
-    .where(and(eq(orders.id, orderId), sql`${orders.invoiceId} IS NULL`))
-    .returning();
-  await audit(db, actor, {
-    action: "order.invoice_created",
-    entityType: "order",
-    entityId: orderId,
-    metadata: { invoiceId: invoice.invoiceId },
+  const outcome = await db.transaction(async (tx) => {
+    const [current] = await tx.select().from(orders).where(eq(orders.id, orderId)).for("update");
+    if (!current) throw new NotFoundError("Order not found");
+    // Already recorded: a concurrent retry, or the webhook for an invoice paid on finalisation.
+    if (current.invoiceId === invoice.invoiceId) return { order: current };
+    if (current.status !== "awaiting_deposit") {
+      await audit(tx, actor, {
+        action: "order.invoice_voided",
+        entityType: "order",
+        entityId: orderId,
+        metadata: { invoiceId: invoice.invoiceId, orderStatus: current.status },
+      });
+      return { order: current, discardedInvoiceId: invoice.invoiceId };
+    }
+    if (current.invoiceId) return { order: current };
+    const [updated] = await tx
+      .update(orders)
+      .set({ invoiceId: invoice.invoiceId, invoiceUrl: invoice.hostedInvoiceUrl })
+      .where(eq(orders.id, orderId))
+      .returning();
+    await audit(tx, actor, {
+      action: "order.invoice_created",
+      entityType: "order",
+      entityId: orderId,
+      metadata: { invoiceId: invoice.invoiceId },
+    });
+    return { order: updated! };
   });
-  return updated ?? row.order;
+  if (outcome.discardedInvoiceId) {
+    const invoiceId = outcome.discardedInvoiceId;
+    await getBillingProvider()
+      .voidInvoice(invoiceId)
+      .catch((err) =>
+        logger.error(
+          { err, orderId, invoiceId },
+          "could not void the deposit invoice of a cancelled order — check for payment/refund",
+        ),
+      );
+    throw new ConflictError(`Order is ${outcome.order.status}`, "invalid_state");
+  }
+  return outcome.order;
 }

@@ -92,7 +92,11 @@ Request (customer) → review with draft pricing (engineer/admin, `priceItem` se
 `awaiting_deposit` with `deposit = ceil(total × DEPOSIT_PERCENT%)` → Stripe invoice (customer, invoice,
 invoice item, finalize, send — each with an idempotency key) → `invoice.paid` webhook → `confirmed`
 → operator reserves stock at a depot → fulfil writes a `delivery` ledger entry from reserved stock.
-The order is committed before calling Stripe; if invoice creation fails it can be retried.
+The order is committed before calling Stripe; if invoice creation fails it can be retried. The new
+invoice id is recorded under the order's row lock (the one cancellation takes) and only while the
+order still awaits its deposit; if it was cancelled while Stripe was creating the invoice, the invoice
+is voided instead (audited as `order.invoice_voided`). Cancelling an order that already has an
+invoice voids it too.
 
 ### Stripe webhook
 
