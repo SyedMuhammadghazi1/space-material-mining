@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import type { UserRole } from "@/db/schema";
 import { auth } from "@/lib/auth";
+import { clientIp } from "@/lib/client-ip";
 import { type Actor, isRole } from "./authz";
 import { ForbiddenError, UnauthorizedError } from "./errors";
 
@@ -15,6 +16,7 @@ async function actorFromHeaders(h: Headers): Promise<Actor | null> {
     email: session.user.email,
     name: session.user.name,
     role: isRole(role) ? role : "customer",
+    ip: clientIp(h),
   };
 }
 

@@ -6,6 +6,8 @@ export interface Actor {
   email: string;
   name: string;
   role: UserRole;
+  /** Client IP of the request that resolved this actor (see `clientIp`), recorded in the audit log. */
+  ip?: string | null;
 }
 
 export const STAFF_ROLES: readonly UserRole[] = ["engineer", "operator", "admin"];

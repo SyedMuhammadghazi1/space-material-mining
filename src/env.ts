@@ -20,7 +20,17 @@ const schema = z
     BETTER_AUTH_SECRET: z.string().min(32, "BETTER_AUTH_SECRET must be at least 32 characters"),
     BETTER_AUTH_URL: z.url().optional(),
     CRON_SECRET: z.string().min(16, "CRON_SECRET must be at least 16 characters"),
-    TRUST_PROXY: bool,
+    // Client IP resolution (rate limits, audit log, sessions): see src/lib/client-ip.ts.
+    CLIENT_IP_HEADER: z
+      .string()
+      .regex(/^[A-Za-z0-9!#$%&'*+.^_`|~-]+$/, "CLIENT_IP_HEADER must be a single header name")
+      .transform((h) => h.toLowerCase())
+      .refine((h) => !h.startsWith("x-forwarded-"), {
+        message:
+          "CLIENT_IP_HEADER must be a header clients cannot spoof, not X-Forwarded-* (use TRUSTED_PROXY_HOPS for X-Forwarded-For)",
+      })
+      .optional(),
+    TRUSTED_PROXY_HOPS: z.coerce.number().int().min(0).max(20).default(1),
     LOG_LEVEL: z
       .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
       .default("info"),

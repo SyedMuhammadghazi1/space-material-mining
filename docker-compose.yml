@@ -45,6 +45,9 @@ services:
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
       SMTP_HOST: mailpit
       SMTP_PORT: "1025"
+      # Client IP resolution: see docs/DEPLOYMENT.md#client-ip (the table lists the value per host).
+      CLIENT_IP_HEADER: ${CLIENT_IP_HEADER:-}
+      TRUSTED_PROXY_HOPS: ${TRUSTED_PROXY_HOPS:-1}
       EMAIL_FROM: Orbital Quarry <no-reply@orbital-quarry.test>
     ports:
       - "3002:3000"

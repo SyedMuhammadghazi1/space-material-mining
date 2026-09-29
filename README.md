@@ -126,7 +126,8 @@ All variables are validated by [`src/env.ts`](src/env.ts); `.env.example` docume
 | `BETTER_AUTH_SECRET`                                                                                  | yes          | —                       | ≥ 32 chars session/crypto secret                        |
 | `BETTER_AUTH_URL`                                                                                     | no           | `APP_URL`               | Auth base URL                                           |
 | `CRON_SECRET`                                                                                         | yes          | —                       | Bearer token for `/api/cron/*`                          |
-| `TRUST_PROXY`                                                                                         | no           | `false`                 | Trust `X-Forwarded-For` for rate-limit keys             |
+| `CLIENT_IP_HEADER`                                                                                    | no           | —                       | Unspoofable client-IP header set by the host            |
+| `TRUSTED_PROXY_HOPS`                                                                                  | no           | `1`                     | Proxies appending to `X-Forwarded-For` (0 = ignore it)  |
 | `LOG_LEVEL`                                                                                           | no           | `info`                  | pino level                                              |
 | `PAYMENTS_MODE`                                                                                       | no           | `stripe`                | `stripe` or `test-bypass` (never allowed in production) |
 | `STRIPE_SECRET_KEY`                                                                                   | for payments | —                       | Stripe API key                                          |

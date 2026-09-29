@@ -15,8 +15,34 @@ instances behind a load balancer.
 - `SKIP_ENV_VALIDATION=1` is only for `next build` (the Dockerfile sets it in the build stage). A
   production server ignores it — it applies only while `NEXT_PHASE=phase-production-build` — so a
   missing or invalid secret always stops the app instead of being replaced by a build placeholder.
-- Behind a load balancer that sets `X-Forwarded-For`, set `TRUST_PROXY=true` so rate limits key on
-  the real client IP.
+- Configure how the client IP is determined for your host — see [Client IP](#client-ip) below.
+
+### Client IP
+
+Per-IP rate limits (sign-in/sign-up/password endpoints, failed telemetry keys), the audit log and
+Better Auth sessions all use one resolver (`src/lib/client-ip.ts`). Configure it for the proxies
+actually in front of the app — a wrong setting either lets clients pick their own IP (and dodge
+per-IP limits) or makes every client look the same:
+
+| App runs …                                                    | Setting                             | Why                                                                              |
+| ------------------------------------------------------------- | ----------------------------------- | -------------------------------------------------------------------------------- |
+| on Vercel                                                     | `CLIENT_IP_HEADER=x-real-ip`        | Set by Vercel's edge to the connecting client; client values are replaced.       |
+| on Fly.io                                                     | `CLIENT_IP_HEADER=fly-client-ip`    | Set by Fly's proxy to the connecting client.                                     |
+| behind Cloudflare (any host)                                  | `CLIENT_IP_HEADER=cf-connecting-ip` | Set by Cloudflare. Only accept origin traffic from Cloudflare.                   |
+| on Render, Railway, Heroku, or behind one nginx / ALB / Caddy | `TRUSTED_PROXY_HOPS=1` (default)    | That proxy appends the address it saw to `X-Forwarded-For`.                      |
+| behind two appending proxies (e.g. CDN → load balancer → app) | `TRUSTED_PROXY_HOPS=2`              | Each proxy appends one entry; the client is the 2nd from the right.              |
+| with its port exposed directly (no proxy)                     | `TRUSTED_PROXY_HOPS=0`              | Nothing trustworthy sets the header; per-IP limits off, per-account limits stay. |
+
+- `CLIENT_IP_HEADER` wins when set: only that header is read (first value). Use it only when the app
+  is reachable exclusively through that platform, otherwise a client can send the header itself.
+  `X-Forwarded-*` headers are rejected there.
+- With `TRUSTED_PROXY_HOPS=n` the app takes the `n`-th `X-Forwarded-For` entry from the right. Entries
+  further left are whatever the client sent and are ignored. Fewer entries than `n`, or a value that
+  isn't an IP address, means "no IP".
+- For nginx, append rather than overwrite:
+  `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`.
+- Without a trustworthy IP the app skips the per-IP bucket instead of putting everyone in one shared
+  bucket; credential endpoints stay limited per account (`AUTH_RATE_LIMIT_PER_MINUTE` per email).
 
 ## 2. Container hosts (Render, Fly.io, Railway, ECS, Kubernetes …)
 
@@ -31,8 +57,9 @@ docker run -p 3000:3000 --env-file prod.env orbital-quarry              # serve 
   (checks the database).
 - **Render**: Docker web service; add a "pre-deploy command" `node migrate.mjs`; copy the service's
   deploy hook URL into the GitHub secret `DEPLOY_HOOK_URL`.
-- **Fly.io**: `fly launch --no-deploy`, set secrets with `fly secrets set`, add
-  `[deploy] release_command = "node migrate.mjs"` in `fly.toml`.
+- **Fly.io**: `fly launch --no-deploy`, set secrets with `fly secrets set` (and
+  `CLIENT_IP_HEADER=fly-client-ip`), add `[deploy] release_command = "node migrate.mjs"` in
+  `fly.toml`.
 - **Railway**: deploy from the image or Dockerfile; set the pre-deploy command to `node migrate.mjs`.
 - Behind a corporate TLS-intercepting proxy, build with
   `docker build --network host --build-arg HTTPS_PROXY=… --secret id=extra_ca,src=ca.crt .`
@@ -59,7 +86,8 @@ can pull it (or give the host a read-only token).
 1. Create a Neon project; copy the **pooled** connection string (PgBouncer) as `DATABASE_URL`.
    Keep `DATABASE_POOL_MAX` small (e.g. 3) because serverless functions each open their own pool.
 2. Import the repo in Vercel (framework: Next.js). Set all env vars for Production (and Preview with
-   a separate database/branch). `output: "standalone"` is ignored by Vercel and harmless.
+   a separate database/branch), including `CLIENT_IP_HEADER=x-real-ip`. `output: "standalone"` is
+   ignored by Vercel and harmless.
 3. Migrations: run `npm run db:migrate` from CI (the `migrate` job with `PRODUCTION_DATABASE_URL` =
    Neon's **direct**, non-pooled URL) before promoting, or locally with the production URL.
 4. Cron: add `vercel.json`

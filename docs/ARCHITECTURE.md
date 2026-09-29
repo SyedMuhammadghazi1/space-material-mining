@@ -16,7 +16,8 @@ src/
   lib/
     models/            PURE planning models — no I/O, fully unit-tested
     sbdb.ts            JPL SBDB mapper/fetcher (fetch injectable)
-    telemetry-schema.ts, scenario-input.ts, reference-data.ts, format.ts, auth.ts, mailer.ts, logger.ts
+    telemetry-schema.ts, scenario-input.ts, reference-data.ts, format.ts, auth.ts, mailer.ts, logger.ts,
+    client-ip.ts (the only place the client IP is read from request headers)
   server/              domain services: authorization + I/O (one module per aggregate)
   proxy.ts             optimistic session-cookie gate for /ops, /admin, /portal
 drizzle/               committed SQL migrations (generated + one custom integrity migration)
@@ -136,8 +137,14 @@ slots are below 3:1 contrast on white, which is why the table view and labels ar
 
 - Better Auth email/password (min 10 chars), DB sessions, secure cookies when served over HTTPS; roles
   can only be changed by admins (never self-assigned; admins cannot change their own role).
-- Postgres-backed fixed-window rate limiting on sign-in/sign-up/password endpoints, quote requests and
-  telemetry; `TRUST_PROXY` controls whether `X-Forwarded-For` is trusted.
+- Postgres-backed fixed-window rate limiting on sign-in/sign-up/password endpoints (per client IP and
+  per account), quote requests (per customer) and telemetry (per rig; failed keys per IP). Better
+  Auth's own limiter is disabled in favour of it.
+- One client-IP resolver, `src/lib/client-ip.ts`, feeds rate limits, the audit log and Better Auth
+  sessions: either a single platform header (`CLIENT_IP_HEADER`) or the `X-Forwarded-For` entry
+  `TRUSTED_PROXY_HOPS` from the right (never the spoofable leftmost one); invalid values → no IP.
+  Without an IP, per-IP limits are skipped — never one bucket shared by every client — and
+  per-account limits still apply. Better Auth reads the IP only from a header the auth route sets.
 - Security headers in `next.config.ts`: CSP, HSTS, X-Frame-Options DENY, Referrer-Policy,
   Permissions-Policy, X-Content-Type-Options, COOP.
 - Rig keys: 256-bit random, shown once, SHA-256 at rest, revocable; cron endpoints use a

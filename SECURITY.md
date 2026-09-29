@@ -16,7 +16,10 @@ Only the latest `main` deployment is supported.
   over HTTPS). Roles are assigned only by administrators and enforced server-side on every page,
   server action and route handler; customers can only access their own quotes and orders.
 - Rig API keys are 256-bit random, shown once, stored as SHA-256 hashes and revocable.
-- Rate limiting (Postgres fixed window) on authentication, quote requests and telemetry.
+- Rate limiting (Postgres fixed window) on authentication (per client IP and per account), quote
+  requests and telemetry. The client IP comes from one resolver configured per host
+  (`CLIENT_IP_HEADER` / `TRUSTED_PROXY_HOPS`, see docs/DEPLOYMENT.md) and never from the
+  client-controlled leftmost `X-Forwarded-For` entry.
 - Stripe webhooks are signature-verified against the raw body and processed idempotently; prices are
   computed only on the server.
 - Security headers (CSP, HSTS, X-Frame-Options DENY, Referrer-Policy, Permissions-Policy,

@@ -1,9 +1,10 @@
 import { getEnv } from "@/env";
+import { clientIp } from "@/lib/client-ip";
 import { telemetryBatchSchema } from "@/lib/telemetry-schema";
 import { parseBearer } from "@/server/api-keys";
 import { UnauthorizedError, errorResponse } from "@/server/errors";
 import { enforceRateLimit } from "@/server/rate-limit";
-import { clientIp, readJsonCapped } from "@/server/request";
+import { readJsonCapped } from "@/server/request";
 import { authenticateRigKey } from "@/server/rigs";
 import { ingestTelemetry } from "@/server/telemetry";
 
@@ -18,14 +19,17 @@ const MAX_BODY_BYTES = 512 * 1024;
  */
 export async function POST(req: Request) {
   try {
+    // Failed authentication is limited per client IP. Requests without a trustworthy IP share one
+    // bucket, which only ever throttles requests that fail anyway — valid rig keys never hit it.
+    const ipKey = clientIp(req.headers) ?? "unknown";
     const token = parseBearer(req.headers.get("authorization"));
     if (!token) {
-      await enforceRateLimit(`telemetry:anon:${clientIp(req.headers)}`, 30, 60);
+      await enforceRateLimit(`telemetry:anon:${ipKey}`, 30, 60);
       throw new UnauthorizedError("Missing or malformed bearer API key");
     }
     const rig = await authenticateRigKey(token);
     if (!rig) {
-      await enforceRateLimit(`telemetry:badkey:${clientIp(req.headers)}`, 30, 60);
+      await enforceRateLimit(`telemetry:badkey:${ipKey}`, 30, 60);
       throw new UnauthorizedError("Invalid or revoked API key");
     }
     await enforceRateLimit(`telemetry:rig:${rig.id}`, getEnv().TELEMETRY_RATE_LIMIT_PER_MINUTE, 60);

@@ -6,6 +6,7 @@ import { db } from "@/db";
 import * as schema from "@/db/schema";
 import { getEnv } from "@/env";
 import { APP_NAME } from "@/lib/app-config";
+import { AUTH_CLIENT_IP_HEADER } from "@/lib/client-ip";
 
 function createAuth() {
   const env = getEnv();
@@ -41,11 +42,17 @@ function createAuth() {
       expiresIn: 60 * 60 * 24 * 7,
       updateAge: 60 * 60 * 24,
     },
-    // Rate limiting is enforced by our Postgres-backed limiter in the auth route handler so it
-    // works across instances; Better Auth's in-memory limiter is disabled to avoid double counting.
+    // Rate limiting (per client IP and per account) is enforced by our Postgres-backed limiter in the
+    // auth route handler so it works across instances; Better Auth's in-memory limiter is disabled
+    // to avoid double counting.
     rateLimit: { enabled: false },
     advanced: {
       useSecureCookies: baseURL.startsWith("https://"),
+      // The client IP recorded on sessions comes from our resolver (src/lib/client-ip.ts): the auth
+      // route handler puts it in this header after dropping any client-supplied value. Better Auth
+      // must not read X-Forwarded-For itself (its default), which would disagree with — and be
+      // easier to spoof than — the rest of the app.
+      ipAddress: { ipAddressHeaders: [AUTH_CLIENT_IP_HEADER], ipv6Subnet: 128 },
     },
     plugins: [nextCookies()],
   });

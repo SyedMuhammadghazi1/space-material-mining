@@ -11,7 +11,10 @@ export interface AuditEntry {
   ip?: string | null;
 }
 
-/** Records a sensitive action. Pass the open transaction so the audit row commits atomically. */
+/**
+ * Records a sensitive action. Pass the open transaction so the audit row commits atomically. The IP
+ * defaults to the actor's request IP.
+ */
 export async function audit(
   q: Queryable,
   actor: Actor | { system: string },
@@ -25,6 +28,6 @@ export async function audit(
     entityType: entry.entityType,
     entityId: entry.entityId ?? null,
     metadata: entry.metadata ?? {},
-    ip: entry.ip ?? null,
+    ip: entry.ip ?? (isSystem ? null : (actor.ip ?? null)),
   });
 }
